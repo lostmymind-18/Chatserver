@@ -76,8 +76,7 @@ class Server{
 
 Server* server;
 
-static void retriveClientInfo(int sig, siginfo_t* siginfo, void* context)
-{
+static void getInfo(int sig, siginfo_t* siginfo, void* context){
     if(sig==SIGINT)
     {
         pid_t sender_pid=siginfo->si_pid;
@@ -106,6 +105,11 @@ static void retriveClientInfo(int sig, siginfo_t* siginfo, void* context)
     }
 }
 
+static void newComeHandler(int sig, siginfo_t* siginfo, void* context)
+{
+    
+}
+
 Server::Server()
 {
     this->running=false;
@@ -129,21 +133,11 @@ void Server::stop(){
 int Server::run()
 {
     this->running=true;
-    struct sigaction siga;
-    siga.sa_sigaction=retriveClientInfo;
-    siga.sa_flags=SA_SIGINFO;
-    if(sigaction(SIGINT,&siga,NULL)!=0)
+    /*if(sigaction(SIGINT,&siga,NULL)!=0)
     {
         printf("Error sigaction()");
         return errno;
-    }
-
-    if(sigaction(SIGQUIT,&siga,NULL)!=0)
-    {
-        printf("Error sigaction()");
-        return errno;
-    }
-
+    }*/
     while(this->running){}
     //Create a specific thread for listening new client
     
@@ -154,5 +148,9 @@ int Server::run()
 int main()
 {
     server = new Server();
+    struct sigaction siga;
+    siga.sa_sigaction=newComeHandler;
+    siga.sa_flags=SA_SIGINFO;
+    sigaction(SIGINT,&siga,NULL);
     server->run();
 }
