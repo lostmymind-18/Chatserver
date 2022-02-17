@@ -1,3 +1,5 @@
-This is a chat application, which is:
-     +Written in c++
-     +Server/client module
+I've written this program as a reproduction of real chat application:
+    1. Client-server model
+    2. The protocol between client and server is inspired by the 3 way handshake protocol
+    3. Multi-threaded server for high resposiveness
+    4. Singelton and Observer pattern.

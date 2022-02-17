@@ -1,58 +1,39 @@
-#include  <string>
-#include  <vector>
-#include  <stdio.h>
-#include  <sys/types.h>
-#include  <signal.h>
-#include  <sys/ipc.h>
-#include  <sys/shm.h>
-#include  <unistd.h>
-#include  <iostream>
-#include  <errno.h>
-#include  <pthread.h>
-#include  <cstdio>
+/*Author: Tran Manh Dung*/
+
+#include "type.h"
+
 void SIGINT_handler(int);
 void SIGQUIT_handler(int);
 void SIGUSER1_handler(int);
 void SIGUSER2_handler(int);
 
-struct Message{
-    char mess[200];
-};
-
-struct Info{
-    char name[50];
-    unsigned int room;
-    pid_t pid;
-    bool complete = false;
-};
-
 Info info;
 bool inroom=false;
 //Connect to server
 int   ShmID;
-pid_t *ShmPtr;
+Serverinfo *ShmPtr;
 
 //Send information to sever
 int ShmID1;
 Info *ShmPtr1;
-
-//Send/receive messsages
+pid_t   pid_server;
+//Send receive messsages
 int ShmID2;
 void *ShmPtr2 = NULL;
 int main(void)
 {
-     pid_t   pid_server;
      key_t MyKey;
-     
      char c;
      std::string line;
      int   i;
      info.pid=getpid();
      std::cout<<"My pid: "<<getpid()<<'\n';
-     MyKey   = ftok(".", 's');          /* obtain the shared memory */
-     ShmID   = shmget(MyKey, sizeof(pid_t), 0666);
-     ShmPtr  = (pid_t *) shmat(ShmID, NULL, 0);
-     pid_server     = *ShmPtr;                 /* get process-a's ID       */
+     MyKey   = ftok(".",'s');          /* obtain the shared memory */
+     ShmID   = shmget(MyKey, sizeof(Serverinfo), 0666);
+     std::cout<<"Shared memory server id: "<<ShmID<<'\n';
+     ShmPtr  = (Serverinfo *) shmat(ShmID, NULL, 0);
+     pid_server     = ShmPtr->pid;                 /* get process-a's ID       */
+     std::cout<<"Server's pid: "<<pid_server<<'\n';
      shmdt(ShmPtr);                     /* detach shared memory     */
      //Send signal to the Server
      kill(pid_server, SIGUSR1);
@@ -73,22 +54,27 @@ int main(void)
      }
      while (1) {
         if(inroom && !ShmPtr2){
-            MyKey=ftok(".",info.room);
-            std::cout<<"Common key room: "<<MyKey<<'\n';
-            ShmID2 = shmget(MyKey,sizeof(Message),0666);
+            key_t myKey=ftok(".",info.room);
+            std::cout<<"Common key room: "<<myKey<<'\n';
+            ShmID2 = shmget(myKey,sizeof(Message),0666);
+            if(ShmID2==-1)
+            {
+                std::cout<<"Error\n";
+                exit(-1);
+            }
             ShmPtr2 = (void*)shmat(ShmID,NULL,0);
             while((int*)ShmPtr2==(int*)-1){
-                ShmID2=shmget(MyKey,sizeof(Message),0666);
+                ShmID2=shmget(myKey,sizeof(Message),0666);
                 ShmPtr2=(void*)shmat(ShmID2,NULL,0);
-                std::cout<<"Waiting for room\n";
             }
         }
         else if(inroom && ShmPtr2){
             Message newMessage;
-            std::cin>>newMessage.mess;
-            *(Message*)ShmPtr2 = newMessage;
+            fgets(newMessage.mess,100,stdin);
+            memcpy(((Message*)ShmPtr2)->name,info.name,strlen(info.name)+1);
+            memcpy(((Message*)ShmPtr2)->mess,newMessage.mess,strlen(newMessage.mess)+1);
             kill(pid_server,SIGUSR2);
-            std::cout<<"Message send: "<<((Message*)ShmPtr2)->mess;
+            std::cout<<"You: "<<((Message*)ShmPtr2)->mess<<'\n';
         }
      }
 }
@@ -100,12 +86,13 @@ void SIGUSER1_handler(int sig)
     std::cout<<"Enter room number: \n";
     std::cin>>info.room;
     key_t key=ftok(".",info.pid);
-    std::cout<<"common key: "<<key<<'\n';
     ShmID1=shmget(key,sizeof(Info),IPC_CREAT|0666);
     ShmPtr1=(Info*)shmat(ShmID1,NULL,0);
     *ShmPtr1=info;
     ShmPtr1->complete=true;
     std::cout<<"Information entering complete!\n";
+    std::cout<<"If you wait over 2 seconds but not in the chat room yet, you should Ctr+C and try again\n";
+    shmdt(ShmPtr1);
 }
 
 void SIGUSER2_handler(int sig)
@@ -116,12 +103,14 @@ void SIGUSER2_handler(int sig)
         inroom = true;
     }
     else{
-        std::cout<<*(char*)ShmPtr2<<'\n';
+        std::cout<<((Message*)ShmPtr2)->name<<": "<<((Message*)ShmPtr2)->mess<<'\n';
     }
 }
 
 void SIGINT_handler(int sig)
 {
     std::cout<<"Terminal...\n";
+    shmdt(ShmPtr2);
+    kill(pid_server,SIGHUP);
     exit(0);
 }
